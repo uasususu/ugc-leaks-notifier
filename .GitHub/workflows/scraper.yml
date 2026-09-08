@@ -12,6 +12,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # We still checkout with default token; we'll push using GH_PAT explicitly later
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -30,3 +33,31 @@ jobs:
           RUN_ONCE: 'true'
           HEADLESS: 'true'
         run: node index.js
+
+      - name: Commit seen.json if changed
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          # abort if no seen.json produced
+          if [ ! -f seen.json ]; then
+            echo "No seen.json to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Show status for debugging
+          git status --porcelain || true
+          git add seen.json
+
+          # If nothing to commit, exit cleanly
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Update seen.json [skip ci]" || { echo "Commit failed"; exit 1; }
+
+          # Push using the provided GH_PAT (avoid using the automatically provided GITHUB_TOKEN)
+          git push "https://${GH_PAT}@github.com/${{ github.repository }}.git" HEAD:main
